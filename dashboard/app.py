@@ -75,9 +75,14 @@ with col2:
         st.error(f"Could not connect to backend to fetch logs: {e}")
         
     if not df.empty:
-        st.dataframe(df, use_container_width=True)
+        # Reorder and select key columns for clean dashboard visibility upfront
+        desired_cols = ["id", "timestamp", "image_name", "confidence", "prediction", "compliance_status", "operator_decision"]
+        available_cols = [col for col in desired_cols if col in df.columns]
+        display_df = df[available_cols] if available_cols else df
+
+        st.dataframe(display_df, use_container_width=True)
         st.metric(label="Total Inspections Logged", value=len(df))
-        st.metric(label="Flagged for Human Review", value=int(df["requires_human_review"].sum()))
+        st.metric(label="Flagged for Human Review", value=int(df["requires_human_review"].sum()) if "requires_human_review" in df.columns else 0)
         
         # Human Review Sign-Off Section
         st.markdown("---")
