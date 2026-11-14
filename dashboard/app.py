@@ -105,3 +105,49 @@ with col2:
             st.info("No audit logs recorded yet.")
     else:
         st.info("Audit database not initialized yet. Run an inspection first.")
+        with col2:
+    st.subheader("EU AI Act Audit Trail & Governance Log")
+    
+    try:
+        logs_response = requests.get(f"{BACKEND_BASE_URL}/logs", timeout=5)
+        if logs_response.status_code == 200:
+            df = pd.DataFrame(logs_response.json())
+        else:
+            df = pd.DataFrame()
+    except Exception as e:
+        df = pd.DataFrame()
+        st.error(f"Could not connect to backend to fetch logs: {e}")
+        
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+        st.metric(label="Total Inspections Logged", value=len(df))
+        st.metric(label="Flagged for Human Review", value=int(df["requires_human_review"].sum()))
+        
+        # Human Review Sign-Off Section
+        st.markdown("---")
+        st.subheader("✍️ Operator Human Review & Override")
+        pending_logs = df[df["operator_decision"] == "Pending Review"]
+        
+        if not pending_logs.empty:
+            selected_log_id = st.selectbox("Select Audit ID to Review", pending_logs["id"].tolist())
+            selected_row = pending_logs[pending_logs["id"] == selected_log_id].iloc[0]
+            
+            st.write(f"**Inspection File:** `{selected_row['image_name']}` | **Confidence:** `{selected_row['confidence']*100:.1f}%`")
+            
+            decision = st.radio("Operator Decision:", ["Approved - False Positive (Pass)", "Rejected - Confirmed Defect"])
+            
+            if st.button("Submit Operator Sign-Off"):
+                try:
+                    payload = {"decision": decision}
+                    rev_response = requests.post(f"{REVIEW_URL_BASE}/{selected_log_id}", json=payload, timeout=5)
+                    if rev_response.status_code == 200:
+                        st.success(f"Audit Log #{selected_log_id} successfully updated with decision: {decision}!")
+                        st.rerun()
+                    else:
+                        st.error(f"Failed to review: {rev_response.text}")
+                except Exception as e:
+                    st.error(f"Error connecting to review API: {e}")
+        else:
+            st.info("No pending audits requiring human review.")
+    else:
+        st.info("Audit database not initialized yet or no logs recorded. Run an inspection first.")

@@ -81,3 +81,12 @@ def review_inspection(log_id: int, review: ReviewRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    @app.get("/logs")
+def get_audit_logs():
+    db_path = "logs/aoi_audit_trail.db"
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    df = pd.read_sql_query("SELECT * FROM audit_logs ORDER BY id DESC", conn)
+    conn.close()
+    return df.to_dict(orient="records")
