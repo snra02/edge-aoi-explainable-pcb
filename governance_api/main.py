@@ -2,6 +2,9 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Header
 from pydantic import BaseModel
 import cv2
 import numpy as np
+import sqlite3
+import os
+import pandas as pd
 from governance_api.audit_logger import log_inspection, init_db, update_audit_review
 
 app = FastAPI(title="Edge-AOI PCB Inspection Governance API")
@@ -21,6 +24,16 @@ def read_root():
         "confidence_threshold": 0.80
     }
 
+@app.get("/logs")
+def get_audit_logs():
+    db_path = "logs/aoi_audit_trail.db"
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    df = pd.read_sql_query("SELECT * FROM audit_logs ORDER BY id DESC", conn)
+    conn.close()
+    return df.to_dict(orient="records")
+
 @app.post("/inspect")
 async def inspect_pcb(file: UploadFile = File(...), simulate_defect: str = Header("false")):
     image_bytes = await file.read()
@@ -32,15 +45,12 @@ async def inspect_pcb(file: UploadFile = File(...), simulate_defect: str = Heade
 
     try:
         if simulate_defect.lower() == "true":
-            # Force a low confidence score for testing human review workflow
             confidence = 0.72
         else:
-            # Real OpenCV Feature Extraction with balanced scaling
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             contrast = float(np.std(gray))
             sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
             
-            # Recalibrated formula: scales typical PCB features to test both passes and defects naturally
             score_metric = (contrast * 0.6 + min(sharpness, 300) * 0.4) / 250.0
             confidence = float(min(max(score_metric, 0.45), 0.99))
             confidence = round(confidence, 2)
@@ -81,12 +91,3 @@ def review_inspection(log_id: int, review: ReviewRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    @app.get("/logs")
-def get_audit_logs():
-    db_path = "logs/aoi_audit_trail.db"
-    if not os.path.exists(db_path):
-        return []
-    conn = sqlite3.connect(db_path)
-    df = pd.read_sql_query("SELECT * FROM audit_logs ORDER BY id DESC", conn)
-    conn.close()
-    return df.to_dict(orient="records")
