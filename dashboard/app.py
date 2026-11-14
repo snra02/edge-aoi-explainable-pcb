@@ -12,8 +12,11 @@ st.set_page_config(
 )
 
 DB_PATH = "logs/aoi_audit_trail.db"
-API_URL = "http://127.0.0.1:8000/inspect"
-REVIEW_URL_BASE = "http://127.0.0.1:8000/review"
+
+# Dynamically resolve backend URL: checks Streamlit Secrets first, then environment variables, defaults to localhost
+BACKEND_BASE_URL = st.secrets.get("BACKEND_URL", os.getenv("BACKEND_URL", "http://127.0.0.1:8000"))
+API_URL = f"{BACKEND_BASE_URL}/inspect"
+REVIEW_URL_BASE = f"{BACKEND_BASE_URL}/review"
 
 st.title("🛡️ Edge-AOI PCB Inspection & EU AI Act Governance Dashboard")
 st.markdown("Automated optical inspection with mandatory human-in-the-loop governance for low-confidence classifications (<80%).")
@@ -56,7 +59,7 @@ with col1:
                     else:
                         st.error(f"Backend API error: {response.status_code}.")
                 except Exception as e:
-                    st.error(f"Could not connect to FastAPI backend: {e}")
+                    st.error(f"Could not connect to FastAPI backend at {BACKEND_BASE_URL}: {e}")
     else:
         st.info("Upload a PCB image in the sidebar to begin inspection.")
 
